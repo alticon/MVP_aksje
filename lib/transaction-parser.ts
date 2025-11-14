@@ -27,6 +27,13 @@ export function parseTransactionFromText(text: string): ParsedTransaction {
   const normalizedText = text.replace(/\s+/g, ' ').trim();
   console.log("Normalized OCR text:", normalizedText);
 
+  // Try Nordnet format first (ordrehistorikk)
+  const nordnetParsed = parseNordnetFormat(normalizedText);
+  if (nordnetParsed && nordnetParsed.confidence !== "low") {
+    console.log("Nordnet format detected:", nordnetParsed);
+    return nordnetParsed;
+  }
+
   // Detect transaction type (kjøp/salg)
   const transactionType = detectTransactionType(normalizedText);
   if (transactionType) {
@@ -66,6 +73,72 @@ export function parseTransactionFromText(text: string): ParsedTransaction {
 
   // Determine confidence level
   result.confidence = determineConfidence(result);
+
+  return result;
+}
+
+/**
+ * Parses Nordnet order history format
+ * Format: "Navn ... Kjop/Selg Antall Limit ..."
+ */
+function parseNordnetFormat(text: string): ParsedTransaction | null {
+  const result: ParsedTransaction = {
+    confidence: "low",
+    rawText: text,
+  };
+
+  // Nordnet pattern: Name ... Kjop/Selg Number Number(,/.)Number ...
+  // Example: "Noram Drilling ... oO 100% Kjop 6000 25,000 27.350"
+
+  // Look for the transaction type first
+  const typeMatch = text.match(/\b(Kjop|Kjøp|Selg|Salg)\b/i);
+  if (!typeMatch) return null;
+
+  result.type = typeMatch[1].toLowerCase().includes('kjop') || typeMatch[1].toLowerCase().includes('kjøp') ? 'buy' : 'sell';
+  const typeIndex = typeMatch.index || 0;
+
+  // Extract company name (everything before the type, but after common headers)
+  const beforeType = text.substring(0, typeIndex);
+  const nameMatch = beforeType.match(/([A-ZÆØÅ][a-zæøå]+(?:\s+[A-ZÆØÅ][a-zæøå]+)*)\s*\.{0,3}\s*[oO0]*\s*\d{0,3}%?\s*$/);
+  if (nameMatch && nameMatch[1]) {
+    result.name = nameMatch[1].trim();
+  }
+
+  // Extract quantity and price after the type
+  const afterType = text.substring(typeIndex + typeMatch[0].length);
+
+  // Pattern: Number(space)Number[,.]Number
+  // First large number is quantity, second is price
+  const numbersMatch = afterType.match(/\b(\d{1,})\s+(\d{1,})[,.](\d{1,})/);
+  if (numbersMatch) {
+    result.quantity = parseInt(numbersMatch[1].replace(/\s/g, ''), 10);
+    result.price = parseFloat(`${numbersMatch[2]}.${numbersMatch[3]}`);
+  }
+
+  // Extract date if present
+  const dateMatch = text.match(/(\d{2})\.(\d{2})\.(\d{4})/);
+  if (dateMatch) {
+    const day = dateMatch[1];
+    const month = dateMatch[2];
+    const year = dateMatch[3];
+    result.date = `${year}-${month}-${day}`;
+  }
+
+  // Determine confidence
+  let score = 0;
+  if (result.type) score++;
+  if (result.name) score++;
+  if (result.quantity) score++;
+  if (result.price) score++;
+  if (result.date) score++;
+
+  if (score >= 4) {
+    result.confidence = "high";
+  } else if (score >= 3) {
+    result.confidence = "medium";
+  } else {
+    result.confidence = "low";
+  }
 
   return result;
 }
