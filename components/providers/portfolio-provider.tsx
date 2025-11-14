@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useState, ReactNode } from "react";
+import React, { createContext, useContext, useState, ReactNode, useCallback } from "react";
 import { HoldingDisplay, PortfolioSummary } from "@/types/holdings";
 import { mockHoldings, mockPortfolio } from "@/lib/mock-data";
 
@@ -29,7 +29,7 @@ export function PortfolioProvider({ children }: { children: ReactNode }) {
   const [holdings, setHoldings] = useState<HoldingDisplay[]>(mockHoldings);
   const [portfolio, setPortfolio] = useState<PortfolioSummary>(mockPortfolio);
 
-  const addTransaction = (transaction: {
+  const addTransaction = useCallback((transaction: {
     type: "buy" | "sell";
     ticker: string;
     quantity: number;
@@ -38,121 +38,141 @@ export function PortfolioProvider({ children }: { children: ReactNode }) {
     name?: string;
     description?: string;
   }) => {
+    console.log("Adding transaction:", transaction);
+
     const { type, ticker, quantity, price, date, name, description } = transaction;
 
-    // Find existing holding with same ticker
-    const existingHoldingIndex = holdings.findIndex(
-      (h) => h.ticker.toLowerCase() === ticker.toLowerCase() && !h.isSold
-    );
+    setHoldings(currentHoldings => {
+      // Find existing holding with same ticker
+      const existingHoldingIndex = currentHoldings.findIndex(
+        (h) => h.ticker.toLowerCase() === ticker.toLowerCase() && !h.isSold
+      );
 
-    if (type === "buy") {
-      if (existingHoldingIndex >= 0) {
-        // Update existing holding
-        const updatedHoldings = [...holdings];
-        const existing = updatedHoldings[existingHoldingIndex];
-        const totalQuantity = existing.quantity + quantity;
-        const totalCost = existing.totalCost + (quantity * price);
-        const avgPrice = totalCost / totalQuantity;
+      if (type === "buy") {
+        if (existingHoldingIndex >= 0) {
+          // Update existing holding
+          const updatedHoldings = [...currentHoldings];
+          const existing = updatedHoldings[existingHoldingIndex];
+          const totalQuantity = existing.quantity + quantity;
+          const totalCost = existing.totalCost + (quantity * price);
+          const avgPrice = totalCost / totalQuantity;
 
-        updatedHoldings[existingHoldingIndex] = {
-          ...existing,
-          quantity: totalQuantity,
-          avgPrice: avgPrice,
-          totalCost: totalCost,
-          currentValue: totalQuantity * (existing.currentPrice || price),
-          unrealizedGain: (totalQuantity * (existing.currentPrice || price)) - totalCost,
-        };
+          updatedHoldings[existingHoldingIndex] = {
+            ...existing,
+            quantity: totalQuantity,
+            avgPrice: avgPrice,
+            totalCost: totalCost,
+            currentValue: totalQuantity * (existing.currentPrice || price),
+            unrealizedGain: (totalQuantity * (existing.currentPrice || price)) - totalCost,
+          };
 
-        setHoldings(updatedHoldings);
-      } else {
-        // Create new holding
-        const newHolding: HoldingDisplay = {
-          id: Date.now().toString(),
-          name: name || ticker,
-          ticker: ticker.toUpperCase(),
-          description: description || `Aksje i ${name || ticker}`,
-          isSold: false,
-          returnPercent: 0,
-          ownershipType: "Privat",
-          ownerName: "Demo User",
-          broker: "Demo Broker",
-          purchaseDate: date,
-          quantity: quantity,
-          avgPrice: price,
-          currentPrice: price,
-          totalCost: quantity * price,
-          currentValue: quantity * price,
-          unrealizedGain: 0,
-          dividends: 0,
-          totalReturn: 0,
-        };
+          console.log("Updated existing holding:", updatedHoldings[existingHoldingIndex]);
+          return updatedHoldings;
+        } else {
+          // Create new holding
+          const newHolding: HoldingDisplay = {
+            id: Date.now().toString(),
+            name: name || ticker,
+            ticker: ticker.toUpperCase(),
+            description: description || `Aksje i ${name || ticker}`,
+            isSold: false,
+            returnPercent: 0,
+            ownershipType: "Privat",
+            ownerName: "Demo User",
+            broker: "Demo Broker",
+            purchaseDate: date,
+            quantity: quantity,
+            avgPrice: price,
+            currentPrice: price,
+            totalCost: quantity * price,
+            currentValue: quantity * price,
+            unrealizedGain: 0,
+            dividends: 0,
+            totalReturn: 0,
+          };
 
-        setHoldings([...holdings, newHolding]);
+          console.log("Created new holding:", newHolding);
 
-        // Update portfolio summary
-        setPortfolio({
-          ...portfolio,
-          totalCost: portfolio.totalCost + (quantity * price),
-          currentValue: portfolio.currentValue + (quantity * price),
-          activePositions: portfolio.activePositions + 1,
-        });
+          // Update portfolio summary
+          setPortfolio(currentPortfolio => ({
+            ...currentPortfolio,
+            totalCost: currentPortfolio.totalCost + (quantity * price),
+            currentValue: currentPortfolio.currentValue + (quantity * price),
+            activePositions: currentPortfolio.activePositions + 1,
+          }));
+
+          return [...currentHoldings, newHolding];
+        }
+      } else if (type === "sell") {
+        if (existingHoldingIndex >= 0) {
+          const updatedHoldings = [...currentHoldings];
+          const existing = updatedHoldings[existingHoldingIndex];
+
+          // Mark as sold
+          updatedHoldings[existingHoldingIndex] = {
+            ...existing,
+            isSold: true,
+            saleDate: date,
+            salePrice: price,
+            saleValue: quantity * price,
+            realizedGain: (quantity * price) - (existing.avgPrice * quantity),
+            returnPercent: ((quantity * price) / (existing.avgPrice * quantity) - 1) * 100,
+          };
+
+          console.log("Marked holding as sold:", updatedHoldings[existingHoldingIndex]);
+
+          // Update portfolio summary
+          const realizedGain = (quantity * price) - (existing.avgPrice * quantity);
+          setPortfolio(currentPortfolio => ({
+            ...currentPortfolio,
+            totalGain: currentPortfolio.totalGain + realizedGain,
+            activePositions: Math.max(0, currentPortfolio.activePositions - 1),
+            soldPositions: currentPortfolio.soldPositions + 1,
+          }));
+
+          return updatedHoldings;
+        }
       }
-    } else if (type === "sell") {
-      if (existingHoldingIndex >= 0) {
-        const updatedHoldings = [...holdings];
-        const existing = updatedHoldings[existingHoldingIndex];
 
-        // Mark as sold
-        updatedHoldings[existingHoldingIndex] = {
-          ...existing,
-          isSold: true,
-          saleDate: date,
-          salePrice: price,
-          saleValue: quantity * price,
-          realizedGain: (quantity * price) - (existing.avgPrice * quantity),
-          returnPercent: ((quantity * price) / (existing.avgPrice * quantity) - 1) * 100,
-        };
+      return currentHoldings;
+    });
+  }, []);
 
-        setHoldings(updatedHoldings);
+  const addDividend = useCallback((dividend: { ticker: string; amount: number; date: string }) => {
+    console.log("Adding dividend:", dividend);
 
-        // Update portfolio summary
-        const realizedGain = (quantity * price) - (existing.avgPrice * quantity);
-        setPortfolio({
-          ...portfolio,
-          totalGain: portfolio.totalGain + realizedGain,
-          activePositions: Math.max(0, portfolio.activePositions - 1),
-          soldPositions: portfolio.soldPositions + 1,
-        });
-      }
-    }
-  };
-
-  const addDividend = (dividend: { ticker: string; amount: number; date: string }) => {
     const { ticker, amount } = dividend;
 
-    // Find holding with ticker
-    const holdingIndex = holdings.findIndex(
-      (h) => h.ticker.toLowerCase() === ticker.toLowerCase()
-    );
+    setHoldings(currentHoldings => {
+      // Find holding with ticker
+      const holdingIndex = currentHoldings.findIndex(
+        (h) => h.ticker.toLowerCase() === ticker.toLowerCase()
+      );
 
-    if (holdingIndex >= 0) {
-      const updatedHoldings = [...holdings];
-      const existing = updatedHoldings[holdingIndex];
+      if (holdingIndex >= 0) {
+        const updatedHoldings = [...currentHoldings];
+        const existing = updatedHoldings[holdingIndex];
 
-      updatedHoldings[holdingIndex] = {
-        ...existing,
-        dividends: (existing.dividends || 0) + amount,
-      };
+        updatedHoldings[holdingIndex] = {
+          ...existing,
+          dividends: (existing.dividends || 0) + amount,
+        };
 
-      setHoldings(updatedHoldings);
+        console.log("Updated holding with dividend:", updatedHoldings[holdingIndex]);
 
-      // Update portfolio summary
-      setPortfolio({
-        ...portfolio,
-        totalDividends: portfolio.totalDividends + amount,
-      });
-    }
-  };
+        // Update portfolio summary
+        setPortfolio(currentPortfolio => ({
+          ...currentPortfolio,
+          totalDividends: currentPortfolio.totalDividends + amount,
+        }));
+
+        return updatedHoldings;
+      }
+
+      console.log("Holding not found for ticker:", ticker);
+      return currentHoldings;
+    });
+  }, []);
 
   return (
     <PortfolioContext.Provider value={{ holdings, portfolio, addTransaction, addDividend }}>
