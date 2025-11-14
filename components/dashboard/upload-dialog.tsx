@@ -138,19 +138,19 @@ export function UploadDialog({ open, onOpenChange }: UploadDialogProps) {
         <DialogHeader>
           <DialogTitle>Last opp sluttseddel</DialogTitle>
           <DialogDescription>
-            Last opp et bilde av sluttseddelen, så leser vi informasjonen automatisk
+            Last opp sluttseddelen som PDF eller bilde, så leser vi informasjonen automatisk
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit}>
           <div className="grid gap-4 py-4">
             {/* File upload */}
             <div className="grid gap-2">
-              <Label htmlFor="file">Sluttseddel (JPG, PNG)</Label>
+              <Label htmlFor="file">Sluttseddel (PDF, JPG, PNG)</Label>
               <div className="flex items-center gap-2">
                 <Input
                   id="file"
                   type="file"
-                  accept=".jpg,.jpeg,.png"
+                  accept=".pdf,.jpg,.jpeg,.png"
                   onChange={handleFileChange}
                   className="cursor-pointer"
                   disabled={isProcessing}
