@@ -20,7 +20,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { usePortfolio } from "@/components/providers/portfolio-provider";
-import { Upload, Loader2, CheckCircle2, AlertCircle } from "lucide-react";
+import { Upload, Loader2, CheckCircle2, AlertCircle, ThumbsUp, ThumbsDown, Star } from "lucide-react";
 import { extractText, OCRProgress } from "@/lib/ocr";
 import { parseTransactionFromText, ParsedTransaction } from "@/lib/transaction-parser";
 
@@ -35,6 +35,7 @@ export function UploadDialog({ open, onOpenChange }: UploadDialogProps) {
   const [isProcessing, setIsProcessing] = useState(false);
   const [ocrProgress, setOcrProgress] = useState<OCRProgress | null>(null);
   const [ocrResult, setOcrResult] = useState<ParsedTransaction | null>(null);
+  const [ocrRating, setOcrRating] = useState<number | null>(null);
   const [formData, setFormData] = useState({
     type: "buy" as "buy" | "sell",
     ticker: "",
@@ -104,6 +105,7 @@ export function UploadDialog({ open, onOpenChange }: UploadDialogProps) {
     // Reset form
     setFile(null);
     setOcrResult(null);
+    setOcrRating(null);
     setFormData({
       type: "buy",
       ticker: "",
@@ -112,6 +114,36 @@ export function UploadDialog({ open, onOpenChange }: UploadDialogProps) {
       price: "",
       date: new Date().toISOString().split('T')[0],
     });
+  };
+
+  const handleRating = (rating: number) => {
+    setOcrRating(rating);
+
+    // Log rating data for analysis
+    console.log("OCR Rating Feedback:", {
+      rating,
+      confidence: ocrResult?.confidence,
+      fileName: file?.name,
+      fileType: file?.type,
+      extractedFields: {
+        hasType: !!ocrResult?.type,
+        hasTicker: !!ocrResult?.ticker,
+        hasName: !!ocrResult?.name,
+        hasQuantity: !!ocrResult?.quantity,
+        hasPrice: !!ocrResult?.price,
+        hasDate: !!ocrResult?.date,
+      },
+      timestamp: new Date().toISOString(),
+    });
+
+    // Show thank you message
+    const ratingText = rating === 5 ? "Fantastisk!" :
+                       rating === 4 ? "Bra!" :
+                       rating === 3 ? "OK" :
+                       rating === 2 ? "Ikke så bra" :
+                       "Dårlig";
+
+    alert(`Takk for tilbakemeldingen! (${ratingText})\n\nDin rating hjelper oss å forbedre OCR-systemet.`);
   };
 
   const getConfidenceColor = (confidence?: "high" | "medium" | "low") => {
@@ -204,6 +236,45 @@ export function UploadDialog({ open, onOpenChange }: UploadDialogProps) {
                     {ocrResult.confidence === "low" && "Kunne ikke lese all informasjon. Vennligst fyll ut manuelt."}
                   </p>
                 </div>
+              </div>
+            )}
+
+            {/* OCR Rating */}
+            {ocrResult && !isProcessing && (
+              <div className="border rounded-lg p-4 bg-gray-50">
+                <p className="text-sm font-medium text-gray-700 mb-3">
+                  Hvor godt fungerte OCR-lesingen?
+                </p>
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    {[1, 2, 3, 4, 5].map((star) => (
+                      <button
+                        key={star}
+                        type="button"
+                        onClick={() => handleRating(star)}
+                        className={`p-2 rounded-md transition-all hover:scale-110 ${
+                          ocrRating && ocrRating >= star
+                            ? 'text-yellow-500'
+                            : 'text-gray-300 hover:text-yellow-400'
+                        }`}
+                        aria-label={`Rate ${star} stars`}
+                      >
+                        <Star
+                          className="w-6 h-6"
+                          fill={ocrRating && ocrRating >= star ? 'currentColor' : 'none'}
+                        />
+                      </button>
+                    ))}
+                  </div>
+                  {ocrRating && (
+                    <span className="text-xs text-gray-500 bg-white px-3 py-1 rounded-full">
+                      ✓ Takk!
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-gray-500 mt-2">
+                  1 = Dårlig, 5 = Perfekt
+                </p>
               </div>
             )}
 
