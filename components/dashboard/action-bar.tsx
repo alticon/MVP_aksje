@@ -5,14 +5,12 @@ import { Button } from "@/components/ui/button";
 import { Plus, DollarSign, Upload, Filter } from "lucide-react";
 import { TransactionDialog } from "./transaction-dialog";
 import { DividendDialog } from "./dividend-dialog";
+import { UploadDialog } from "./upload-dialog";
 
 export function ActionBar() {
   const [transactionOpen, setTransactionOpen] = useState(false);
   const [dividendOpen, setDividendOpen] = useState(false);
-
-  const handleUploadClick = () => {
-    alert("Opplasting av sluttseddel kommer snart!");
-  };
+  const [uploadOpen, setUploadOpen] = useState(false);
 
   const handleFilterClick = () => {
     alert("Filterfunksjon kommer snart!");
@@ -38,7 +36,7 @@ export function ActionBar() {
           </Button>
           <Button
             className="bg-cyan-500 hover:bg-cyan-600"
-            onClick={handleUploadClick}
+            onClick={() => setUploadOpen(true)}
           >
             <Upload className="w-4 h-4 mr-2" />
             Last opp sluttseddel
@@ -57,6 +55,10 @@ export function ActionBar() {
       <DividendDialog
         open={dividendOpen}
         onOpenChange={setDividendOpen}
+      />
+      <UploadDialog
+        open={uploadOpen}
+        onOpenChange={setUploadOpen}
       />
     </>
   );

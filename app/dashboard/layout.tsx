@@ -1,4 +1,7 @@
+"use client";
+
 import { Header } from "@/components/layout/header";
+import { PortfolioProvider } from "@/components/providers/portfolio-provider";
 
 export default function DashboardLayout({
   children,
@@ -6,9 +9,11 @@ export default function DashboardLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className="min-h-screen bg-gray-50">
-      <Header />
-      <main>{children}</main>
-    </div>
+    <PortfolioProvider>
+      <div className="min-h-screen bg-gray-50">
+        <Header />
+        <main>{children}</main>
+      </div>
+    </PortfolioProvider>
   );
 }

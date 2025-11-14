@@ -1,9 +1,13 @@
+"use client";
+
 import { KPIGrid } from "@/components/dashboard/kpi-grid";
 import { HoldingCard } from "@/components/dashboard/holding-card";
 import { ActionBar } from "@/components/dashboard/action-bar";
-import { mockPortfolio, mockHoldings } from "@/lib/mock-data";
+import { usePortfolio } from "@/components/providers/portfolio-provider";
 
 export default function DashboardPage() {
+  const { holdings, portfolio } = usePortfolio();
+
   return (
     <div className="container mx-auto px-4 py-8">
       {/* Header */}
@@ -18,11 +22,11 @@ export default function DashboardPage() {
       <ActionBar />
 
       {/* KPI Grid */}
-      <KPIGrid data={mockPortfolio} />
+      <KPIGrid data={portfolio} />
 
       {/* Holdings Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {mockHoldings.map((holding) => (
+        {holdings.map((holding) => (
           <HoldingCard key={holding.id} holding={holding} />
         ))}
       </div>

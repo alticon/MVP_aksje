@@ -12,6 +12,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { usePortfolio } from "@/components/providers/portfolio-provider";
 
 interface DividendDialogProps {
   open: boolean;
@@ -19,6 +20,7 @@ interface DividendDialogProps {
 }
 
 export function DividendDialog({ open, onOpenChange }: DividendDialogProps) {
+  const { addDividend } = usePortfolio();
   const [formData, setFormData] = useState({
     ticker: "",
     amount: "",
@@ -27,10 +29,16 @@ export function DividendDialog({ open, onOpenChange }: DividendDialogProps) {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    console.log("Utbytte:", formData);
-    // TODO: Send til backend/database
-    alert(`Utbytte registrert!\n${formData.ticker}: ${formData.amount} kr`);
+
+    addDividend({
+      ticker: formData.ticker,
+      amount: Number(formData.amount),
+      date: formData.date,
+    });
+
+    alert(`Utbytte registrert!\n${formData.ticker}: ${formData.amount} kr\n\nKortet er oppdatert i dashboardet!`);
     onOpenChange(false);
+
     // Reset form
     setFormData({
       ticker: "",

@@ -19,6 +19,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { usePortfolio } from "@/components/providers/portfolio-provider";
 
 interface TransactionDialogProps {
   open: boolean;
@@ -26,9 +27,11 @@ interface TransactionDialogProps {
 }
 
 export function TransactionDialog({ open, onOpenChange }: TransactionDialogProps) {
+  const { addTransaction } = usePortfolio();
   const [formData, setFormData] = useState({
-    type: "buy",
+    type: "buy" as "buy" | "sell",
     ticker: "",
+    name: "",
     quantity: "",
     price: "",
     date: new Date().toISOString().split('T')[0],
@@ -36,14 +39,24 @@ export function TransactionDialog({ open, onOpenChange }: TransactionDialogProps
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    console.log("Transaksjon:", formData);
-    // TODO: Send til backend/database
-    alert(`Transaksjon registrert!\n${formData.type === "buy" ? "Kjøp" : "Salg"} av ${formData.quantity} ${formData.ticker} @ ${formData.price} kr`);
+
+    addTransaction({
+      type: formData.type,
+      ticker: formData.ticker,
+      name: formData.name,
+      quantity: Number(formData.quantity),
+      price: Number(formData.price),
+      date: formData.date,
+    });
+
+    alert(`Transaksjon registrert!\n${formData.type === "buy" ? "Kjøp" : "Salg"} av ${formData.quantity} ${formData.ticker} @ ${formData.price} kr\n\nSe nytt kort i dashboardet!`);
     onOpenChange(false);
+
     // Reset form
     setFormData({
       type: "buy",
       ticker: "",
+      name: "",
       quantity: "",
       price: "",
       date: new Date().toISOString().split('T')[0],
@@ -85,6 +98,16 @@ export function TransactionDialog({ open, onOpenChange }: TransactionDialogProps
                 value={formData.ticker}
                 onChange={(e) => setFormData({ ...formData, ticker: e.target.value })}
                 required
+              />
+            </div>
+
+            <div className="grid gap-2">
+              <Label htmlFor="name">Selskapsnavn (valgfritt)</Label>
+              <Input
+                id="name"
+                placeholder="f.eks. Apple Inc."
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
               />
             </div>
 
