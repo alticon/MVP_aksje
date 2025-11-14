@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import "./globals.css";
-import { SessionProvider } from "@/components/providers/session-provider";
 
 export const metadata: Metadata = {
   title: "Aksjeportefølje",
@@ -15,7 +14,7 @@ export default function RootLayout({
   return (
     <html lang="no">
       <body className="font-sans antialiased">
-        <SessionProvider>{children}</SessionProvider>
+        {children}
       </body>
     </html>
   );
