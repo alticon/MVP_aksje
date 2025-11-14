@@ -43,7 +43,7 @@ export async function extractTextFromImage(
 
 /**
  * Extracts text from a PDF file
- * Converts PDF pages to images and runs OCR on them
+ * First tries direct text extraction (fast), then falls back to OCR if needed
  * @param file - The PDF file to process
  * @param onProgress - Optional callback for progress updates
  * @returns The extracted text from all pages
@@ -54,52 +54,84 @@ export async function extractTextFromPDF(
 ): Promise<string> {
   try {
     // Dynamically import PDF utilities (client-side only)
-    const { pdfToImages } = await import('./pdf-utils');
+    const pdfUtils = await import('./pdf-utils');
 
-    // Step 1: Convert PDF to images
+    // Step 1: Try direct text extraction first (much faster and more reliable)
     if (onProgress) {
-      onProgress({ status: 'Konverterer PDF til bilder...', progress: 10 });
+      onProgress({ status: 'Leser tekst fra PDF...', progress: 10 });
     }
 
-    const imageFiles = await pdfToImages(file, (pdfProgress) => {
-      if (onProgress) {
-        const progressPercent = 10 + (pdfProgress.current / pdfProgress.total) * 20;
-        onProgress({
-          status: `Konverterer side ${pdfProgress.current} av ${pdfProgress.total}...`,
-          progress: Math.round(progressPercent)
-        });
+    try {
+      console.log('Attempting direct PDF text extraction...');
+      const extractedText = await pdfUtils.extractTextFromPDF(file, (pdfProgress) => {
+        if (onProgress) {
+          const progressPercent = 10 + (pdfProgress.current / pdfProgress.total) * 60;
+          onProgress({
+            status: `Leser side ${pdfProgress.current} av ${pdfProgress.total}...`,
+            progress: Math.round(progressPercent)
+          });
+        }
+      });
+
+      // Check if we got meaningful text (at least 20 characters)
+      if (extractedText && extractedText.length > 20) {
+        console.log('Direct PDF text extraction successful, length:', extractedText.length);
+        if (onProgress) {
+          onProgress({ status: 'Tekst hentet fra PDF!', progress: 100 });
+        }
+        return extractedText;
+      } else {
+        console.log('Direct text extraction yielded insufficient text, falling back to OCR');
+        throw new Error('Insufficient text extracted, falling back to OCR');
       }
-    });
+    } catch (textExtractionError) {
+      // If direct text extraction fails, fall back to OCR
+      console.log('Direct text extraction failed, attempting OCR fallback:', textExtractionError);
 
-    if (imageFiles.length === 0) {
-      throw new Error('Ingen sider funnet i PDF-en');
-    }
-
-    // Step 2: Run OCR on first page (most sluttsedler are single page)
-    // If needed, we can extend this to process multiple pages
-    if (onProgress) {
-      onProgress({ status: 'Leser tekst fra PDF...', progress: 30 });
-    }
-
-    const firstPageImage = imageFiles[0];
-    const text = await extractTextFromImage(firstPageImage, (ocrProgress) => {
       if (onProgress) {
-        const progressPercent = 30 + (ocrProgress.progress / 100) * 70;
-        onProgress({
-          status: ocrProgress.status,
-          progress: Math.round(progressPercent)
-        });
+        onProgress({ status: 'Konverterer PDF til bilder for OCR...', progress: 20 });
       }
-    });
 
-    // If we have multiple pages and the first page didn't yield good results,
-    // we could process more pages here
-    // For now, we'll just use the first page
+      const imageFiles = await pdfUtils.pdfToImages(file, (pdfProgress) => {
+        if (onProgress) {
+          const progressPercent = 20 + (pdfProgress.current / pdfProgress.total) * 20;
+          onProgress({
+            status: `Konverterer side ${pdfProgress.current} av ${pdfProgress.total}...`,
+            progress: Math.round(progressPercent)
+          });
+        }
+      });
 
-    return text;
+      if (imageFiles.length === 0) {
+        throw new Error('Ingen sider funnet i PDF-en');
+      }
+
+      // Step 2: Run OCR on first page (most sluttsedler are single page)
+      if (onProgress) {
+        onProgress({ status: 'Kjører OCR på PDF...', progress: 40 });
+      }
+
+      const firstPageImage = imageFiles[0];
+      const text = await extractTextFromImage(firstPageImage, (ocrProgress) => {
+        if (onProgress) {
+          const progressPercent = 40 + (ocrProgress.progress / 100) * 60;
+          onProgress({
+            status: ocrProgress.status,
+            progress: Math.round(progressPercent)
+          });
+        }
+      });
+
+      console.log('OCR fallback successful, text length:', text.length);
+      return text;
+    }
   } catch (error) {
-    console.error('PDF OCR error:', error);
-    throw new Error('Kunne ikke lese PDF-filen. Prøv å ta et skjermbilde av sluttseddelen og last opp som bilde.');
+    console.error('PDF processing error:', error);
+    if (error instanceof Error) {
+      console.error('Error details:', error.message);
+      console.error('Error stack:', error.stack);
+    }
+    throw new Error('Kunne ikke lese PDF-filen. Prøv å ta et skjermbilde av sluttseddelen og last opp som bilde i stedet.');
   }
 }
 

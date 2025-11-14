@@ -1,11 +1,79 @@
 import * as pdfjsLib from 'pdfjs-dist';
 
-// Configure PDF.js worker - using unpkg as a more reliable CDN
+// Configure PDF.js worker with multiple fallback strategies
 if (typeof window !== 'undefined') {
-  // Try multiple CDN sources for better reliability
-  pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.js`;
+  // Use jsdelivr CDN which is more reliable in production environments
+  const version = pdfjsLib.version;
+  pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${version}/build/pdf.worker.min.mjs`;
 
+  console.log('PDF.js version:', version);
   console.log('PDF.js worker configured:', pdfjsLib.GlobalWorkerOptions.workerSrc);
+}
+
+/**
+ * Extracts text directly from a PDF file (faster than OCR)
+ * @param file - The PDF file to extract text from
+ * @param onProgress - Optional callback for progress updates
+ * @returns The extracted text from all pages
+ */
+export async function extractTextFromPDF(
+  file: File,
+  onProgress?: (progress: { current: number; total: number }) => void
+): Promise<string> {
+  try {
+    console.log('Starting PDF text extraction for:', file.name, file.type, file.size, 'bytes');
+
+    // Read the file as ArrayBuffer
+    const arrayBuffer = await file.arrayBuffer();
+    console.log('PDF file read as ArrayBuffer, size:', arrayBuffer.byteLength);
+
+    // Load the PDF document with better error handling
+    const loadingTask = pdfjsLib.getDocument({
+      data: arrayBuffer,
+      verbosity: 0, // Reduce console noise
+      useSystemFonts: true, // Better text extraction
+    });
+
+    // Add progress tracking for PDF loading
+    loadingTask.onProgress = (progressData: any) => {
+      console.log('PDF loading progress:', progressData);
+    };
+
+    const pdf = await loadingTask.promise;
+    console.log('PDF loaded successfully, pages:', pdf.numPages);
+
+    let fullText = '';
+    const totalPages = pdf.numPages;
+
+    // Extract text from each page
+    for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
+      if (onProgress) {
+        onProgress({ current: pageNum, total: totalPages });
+      }
+
+      const page = await pdf.getPage(pageNum);
+      const textContent = await page.getTextContent();
+
+      // Combine all text items with spaces
+      const pageText = textContent.items
+        .map((item: any) => item.str)
+        .join(' ');
+
+      fullText += pageText + '\n';
+      console.log(`Extracted ${pageText.length} characters from page ${pageNum}`);
+    }
+
+    console.log('PDF text extraction complete, total text length:', fullText.length);
+    return fullText.trim();
+  } catch (error) {
+    console.error('PDF text extraction error:', error);
+    if (error instanceof Error) {
+      console.error('Error message:', error.message);
+      console.error('Error stack:', error.stack);
+    }
+    // Re-throw the error so we can fallback to OCR
+    throw error;
+  }
 }
 
 /**
@@ -19,14 +87,20 @@ export async function pdfToCanvases(
   onProgress?: (progress: { current: number; total: number }) => void
 ): Promise<HTMLCanvasElement[]> {
   try {
-    console.log('Starting PDF conversion for:', file.name, file.type, file.size, 'bytes');
+    console.log('Starting PDF canvas conversion for:', file.name, file.type, file.size, 'bytes');
 
     // Read the file as ArrayBuffer
     const arrayBuffer = await file.arrayBuffer();
     console.log('PDF file read as ArrayBuffer, size:', arrayBuffer.byteLength);
 
-    // Load the PDF document
-    const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
+    // Load the PDF document with better configuration
+    const loadingTask = pdfjsLib.getDocument({
+      data: arrayBuffer,
+      verbosity: 0, // Reduce console noise
+      useSystemFonts: true,
+      cMapUrl: `https://cdn.jsdelivr.net/npm/pdfjs-dist@${pdfjsLib.version}/cmaps/`,
+      cMapPacked: true,
+    });
 
     // Add progress tracking for PDF loading
     loadingTask.onProgress = (progressData: any) => {

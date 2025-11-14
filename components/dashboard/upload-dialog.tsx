@@ -83,7 +83,17 @@ export function UploadDialog({ open, onOpenChange }: UploadDialogProps) {
       console.error("OCR processing error:", error);
       setIsProcessing(false);
       setOcrProgress(null);
-      alert(`Kunne ikke lese sluttseddelen automatisk: ${error instanceof Error ? error.message : 'Ukjent feil'}\n\nVennligst fyll ut informasjonen manuelt.`);
+
+      // Provide more helpful error message
+      const errorMessage = error instanceof Error ? error.message : 'Ukjent feil';
+      const helpText = selectedFile.type.includes('pdf')
+        ? '\n\nTips: Prøv å ta et skjermbilde av PDF-en og last opp som bilde (JPG/PNG) i stedet.'
+        : '\n\nTips: Sørg for at bildet er klart og leselig.';
+
+      alert(`Kunne ikke lese sluttseddelen automatisk: ${errorMessage}${helpText}\n\nDu kan fortsatt fylle ut informasjonen manuelt nedenfor.`);
+
+      // Keep the file selected so user can still use the form
+      setFile(selectedFile);
     }
   };
 
