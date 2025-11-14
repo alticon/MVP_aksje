@@ -78,7 +78,7 @@ export function TransactionDialog({ open, onOpenChange }: TransactionDialogProps
               <Label htmlFor="type">Type</Label>
               <Select
                 value={formData.type}
-                onValueChange={(value) => setFormData({ ...formData, type: value })}
+                onValueChange={(value: "buy" | "sell") => setFormData({ ...formData, type: value })}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Velg type" />
