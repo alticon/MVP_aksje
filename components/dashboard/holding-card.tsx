@@ -1,15 +1,32 @@
+import { useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { TrendingUp, TrendingDown, Edit, Trash2, RefreshCcw } from "lucide-react";
+import { TrendingUp, TrendingDown, Edit, Trash2, RefreshCcw, Loader2 } from "lucide-react";
 import { HoldingDisplay } from "@/types/holdings";
+import { usePortfolio } from "@/components/providers/portfolio-provider";
 
 interface HoldingCardProps {
   holding: HoldingDisplay;
 }
 
 export function HoldingCard({ holding }: HoldingCardProps) {
+  const { updatePrice } = usePortfolio();
+  const [isUpdating, setIsUpdating] = useState(false);
   const isPositive = holding.returnPercent > 0;
+
+  const handleUpdatePrice = async () => {
+    setIsUpdating(true);
+    try {
+      await updatePrice(holding.id);
+      alert(`Kurs oppdatert for ${holding.ticker}!`);
+    } catch (error) {
+      console.error("Failed to update price:", error);
+      alert("Kunne ikke oppdatere kurs. Prøv igjen senere.");
+    } finally {
+      setIsUpdating(false);
+    }
+  };
 
   return (
     <Card className="p-6 hover:shadow-xl transition-shadow">
@@ -135,9 +152,23 @@ export function HoldingCard({ holding }: HoldingCardProps) {
       {/* Actions */}
       <div className="flex items-center gap-2 mt-6 pt-6 border-t flex-wrap">
         {!holding.isSold && (
-          <Button variant="outline" size="sm">
-            <RefreshCcw className="w-4 h-4 mr-1" />
-            Oppdater kurs
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleUpdatePrice}
+            disabled={isUpdating}
+          >
+            {isUpdating ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                Oppdaterer...
+              </>
+            ) : (
+              <>
+                <RefreshCcw className="w-4 h-4 mr-1" />
+                Oppdater kurs
+              </>
+            )}
           </Button>
         )}
         <Button variant="ghost" size="sm">

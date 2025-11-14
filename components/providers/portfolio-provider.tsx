@@ -21,6 +21,7 @@ interface PortfolioContextType {
     amount: number;
     date: string;
   }) => void;
+  updatePrice: (holdingId: string) => Promise<void>;
 }
 
 const PortfolioContext = createContext<PortfolioContextType | undefined>(undefined);
@@ -174,8 +175,50 @@ export function PortfolioProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
+  const updatePrice = useCallback(async (holdingId: string): Promise<void> => {
+    console.log("Updating price for holding:", holdingId);
+
+    // Simulate API call delay
+    await new Promise(resolve => setTimeout(resolve, 1000));
+
+    setHoldings(currentHoldings => {
+      const holdingIndex = currentHoldings.findIndex(h => h.id === holdingId);
+
+      if (holdingIndex >= 0) {
+        const updatedHoldings = [...currentHoldings];
+        const existing = updatedHoldings[holdingIndex];
+
+        // Simulate price update - random change between -5% and +5%
+        const priceChange = existing.currentPrice ? (existing.currentPrice * (Math.random() * 0.1 - 0.05)) : 0;
+        const newPrice = Math.max(0.01, (existing.currentPrice || existing.avgPrice) + priceChange);
+
+        // Calculate new values
+        const currentValue = existing.quantity * newPrice;
+        const unrealizedGain = currentValue - existing.totalCost;
+        const returnPercent = ((currentValue / existing.totalCost) - 1) * 100;
+
+        updatedHoldings[holdingIndex] = {
+          ...existing,
+          currentPrice: parseFloat(newPrice.toFixed(2)),
+          currentValue: parseFloat(currentValue.toFixed(2)),
+          unrealizedGain: parseFloat(unrealizedGain.toFixed(2)),
+          returnPercent: parseFloat(returnPercent.toFixed(2)),
+          lowPrice: parseFloat(Math.max(0.01, newPrice * 0.98).toFixed(2)),
+          highPrice: parseFloat((newPrice * 1.02).toFixed(2)),
+        };
+
+        console.log("Updated price for holding:", updatedHoldings[holdingIndex]);
+
+        return updatedHoldings;
+      }
+
+      console.log("Holding not found with id:", holdingId);
+      return currentHoldings;
+    });
+  }, []);
+
   return (
-    <PortfolioContext.Provider value={{ holdings, portfolio, addTransaction, addDividend }}>
+    <PortfolioContext.Provider value={{ holdings, portfolio, addTransaction, addDividend, updatePrice }}>
       {children}
     </PortfolioContext.Provider>
   );

@@ -20,7 +20,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { usePortfolio } from "@/components/providers/portfolio-provider";
-import { Upload } from "lucide-react";
+import { Upload, Loader2, CheckCircle2, AlertCircle, ThumbsUp, ThumbsDown, Star } from "lucide-react";
+import { extractText, OCRProgress } from "@/lib/ocr";
+import { parseTransactionFromText, ParsedTransaction } from "@/lib/transaction-parser";
 
 interface UploadDialogProps {
   open: boolean;
@@ -30,6 +32,10 @@ interface UploadDialogProps {
 export function UploadDialog({ open, onOpenChange }: UploadDialogProps) {
   const { addTransaction } = usePortfolio();
   const [file, setFile] = useState<File | null>(null);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [ocrProgress, setOcrProgress] = useState<OCRProgress | null>(null);
+  const [ocrResult, setOcrResult] = useState<ParsedTransaction | null>(null);
+  const [ocrRating, setOcrRating] = useState<number | null>(null);
   const [formData, setFormData] = useState({
     type: "buy" as "buy" | "sell",
     ticker: "",
@@ -39,13 +45,45 @@ export function UploadDialog({ open, onOpenChange }: UploadDialogProps) {
     date: new Date().toISOString().split('T')[0],
   });
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
-    if (selectedFile) {
-      setFile(selectedFile);
-      // TODO: Parse file and extract transaction data
-      // For now, just show that file was uploaded
-      alert(`Fil lastet opp: ${selectedFile.name}\n\nFyll ut transaksjonsinformasjonen manuelt.`);
+    if (!selectedFile) return;
+
+    setFile(selectedFile);
+    setIsProcessing(true);
+    setOcrProgress({ status: "initializing", progress: 0 });
+
+    try {
+      // Extract text from image using OCR
+      const extractedText = await extractText(selectedFile, (progress) => {
+        setOcrProgress(progress);
+      });
+
+      console.log("Extracted text:", extractedText);
+
+      // Parse the extracted text to get transaction data
+      const parsed = parseTransactionFromText(extractedText);
+      setOcrResult(parsed);
+
+      console.log("Parsed transaction:", parsed);
+
+      // Auto-fill the form with parsed data
+      setFormData({
+        type: parsed.type || "buy",
+        ticker: parsed.ticker || "",
+        name: parsed.name || "",
+        quantity: parsed.quantity?.toString() || "",
+        price: parsed.price?.toString() || "",
+        date: parsed.date || new Date().toISOString().split('T')[0],
+      });
+
+      setIsProcessing(false);
+      setOcrProgress(null);
+    } catch (error) {
+      console.error("OCR processing error:", error);
+      setIsProcessing(false);
+      setOcrProgress(null);
+      alert(`Kunne ikke lese sluttseddelen automatisk: ${error instanceof Error ? error.message : 'Ukjent feil'}\n\nVennligst fyll ut informasjonen manuelt.`);
     }
   };
 
@@ -66,6 +104,8 @@ export function UploadDialog({ open, onOpenChange }: UploadDialogProps) {
 
     // Reset form
     setFile(null);
+    setOcrResult(null);
+    setOcrRating(null);
     setFormData({
       type: "buy",
       ticker: "",
@@ -76,20 +116,68 @@ export function UploadDialog({ open, onOpenChange }: UploadDialogProps) {
     });
   };
 
+  const handleRating = (rating: number) => {
+    setOcrRating(rating);
+
+    // Log rating data for analysis
+    console.log("OCR Rating Feedback:", {
+      rating,
+      confidence: ocrResult?.confidence,
+      fileName: file?.name,
+      fileType: file?.type,
+      extractedFields: {
+        hasType: !!ocrResult?.type,
+        hasTicker: !!ocrResult?.ticker,
+        hasName: !!ocrResult?.name,
+        hasQuantity: !!ocrResult?.quantity,
+        hasPrice: !!ocrResult?.price,
+        hasDate: !!ocrResult?.date,
+      },
+      timestamp: new Date().toISOString(),
+    });
+
+    // Show thank you message
+    const ratingText = rating === 5 ? "Fantastisk!" :
+                       rating === 4 ? "Bra!" :
+                       rating === 3 ? "OK" :
+                       rating === 2 ? "Ikke så bra" :
+                       "Dårlig";
+
+    alert(`Takk for tilbakemeldingen! (${ratingText})\n\nDin rating hjelper oss å forbedre OCR-systemet.`);
+  };
+
+  const getConfidenceColor = (confidence?: "high" | "medium" | "low") => {
+    switch (confidence) {
+      case "high": return "text-green-600";
+      case "medium": return "text-yellow-600";
+      case "low": return "text-red-600";
+      default: return "text-gray-600";
+    }
+  };
+
+  const getConfidenceIcon = (confidence?: "high" | "medium" | "low") => {
+    switch (confidence) {
+      case "high": return <CheckCircle2 className="w-4 h-4" />;
+      case "medium": return <AlertCircle className="w-4 h-4" />;
+      case "low": return <AlertCircle className="w-4 h-4" />;
+      default: return null;
+    }
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[500px]">
+      <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Last opp sluttseddel</DialogTitle>
           <DialogDescription>
-            Last opp sluttseddel og registrer transaksjonen
+            Last opp sluttseddelen som PDF eller bilde, så leser vi informasjonen automatisk
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit}>
           <div className="grid gap-4 py-4">
             {/* File upload */}
             <div className="grid gap-2">
-              <Label htmlFor="file">Sluttseddel (PDF, bilde)</Label>
+              <Label htmlFor="file">Sluttseddel (PDF, JPG, PNG)</Label>
               <div className="flex items-center gap-2">
                 <Input
                   id="file"
@@ -97,12 +185,98 @@ export function UploadDialog({ open, onOpenChange }: UploadDialogProps) {
                   accept=".pdf,.jpg,.jpeg,.png"
                   onChange={handleFileChange}
                   className="cursor-pointer"
+                  disabled={isProcessing}
                 />
-                {file && (
-                  <span className="text-sm text-green-600">✓ {file.name}</span>
+                {file && !isProcessing && (
+                  <span className="text-sm text-green-600 flex items-center gap-1">
+                    <CheckCircle2 className="w-4 h-4" />
+                    {file.name}
+                  </span>
                 )}
               </div>
             </div>
+
+            {/* Processing indicator */}
+            {isProcessing && ocrProgress && (
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <div className="flex items-center gap-3">
+                  <Loader2 className="w-5 h-5 animate-spin text-blue-600" />
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-blue-900">
+                      Leser sluttseddel...
+                    </p>
+                    <p className="text-xs text-blue-600 mt-1">
+                      {ocrProgress.status} - {ocrProgress.progress}%
+                    </p>
+                    <div className="w-full bg-blue-200 rounded-full h-2 mt-2">
+                      <div
+                        className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                        style={{ width: `${ocrProgress.progress}%` }}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* OCR Result indicator */}
+            {ocrResult && !isProcessing && (
+              <div className={`border rounded-lg p-3 ${
+                ocrResult.confidence === "high" ? "bg-green-50 border-green-200" :
+                ocrResult.confidence === "medium" ? "bg-yellow-50 border-yellow-200" :
+                "bg-red-50 border-red-200"
+              }`}>
+                <div className="flex items-center gap-2">
+                  <span className={getConfidenceColor(ocrResult.confidence)}>
+                    {getConfidenceIcon(ocrResult.confidence)}
+                  </span>
+                  <p className={`text-sm font-medium ${getConfidenceColor(ocrResult.confidence)}`}>
+                    {ocrResult.confidence === "high" && "Informasjon lest! Sjekk feltene nedenfor."}
+                    {ocrResult.confidence === "medium" && "Noe informasjon funnet. Vennligst kontroller feltene."}
+                    {ocrResult.confidence === "low" && "Kunne ikke lese all informasjon. Vennligst fyll ut manuelt."}
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* OCR Rating */}
+            {ocrResult && !isProcessing && (
+              <div className="border rounded-lg p-4 bg-gray-50">
+                <p className="text-sm font-medium text-gray-700 mb-3">
+                  Hvor godt fungerte OCR-lesingen?
+                </p>
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    {[1, 2, 3, 4, 5].map((star) => (
+                      <button
+                        key={star}
+                        type="button"
+                        onClick={() => handleRating(star)}
+                        className={`p-2 rounded-md transition-all hover:scale-110 ${
+                          ocrRating && ocrRating >= star
+                            ? 'text-yellow-500'
+                            : 'text-gray-300 hover:text-yellow-400'
+                        }`}
+                        aria-label={`Rate ${star} stars`}
+                      >
+                        <Star
+                          className="w-6 h-6"
+                          fill={ocrRating && ocrRating >= star ? 'currentColor' : 'none'}
+                        />
+                      </button>
+                    ))}
+                  </div>
+                  {ocrRating && (
+                    <span className="text-xs text-gray-500 bg-white px-3 py-1 rounded-full">
+                      ✓ Takk!
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-gray-500 mt-2">
+                  1 = Dårlig, 5 = Perfekt
+                </p>
+              </div>
+            )}
 
             <div className="border-t pt-4">
               <p className="text-sm text-gray-500 mb-4">
@@ -186,12 +360,26 @@ export function UploadDialog({ open, onOpenChange }: UploadDialogProps) {
             </div>
           </div>
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+              disabled={isProcessing}
+            >
               Avbryt
             </Button>
-            <Button type="submit">
-              <Upload className="w-4 h-4 mr-2" />
-              Registrer transaksjon
+            <Button type="submit" disabled={isProcessing}>
+              {isProcessing ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Prosesserer...
+                </>
+              ) : (
+                <>
+                  <Upload className="w-4 h-4 mr-2" />
+                  Registrer transaksjon
+                </>
+              )}
             </Button>
           </DialogFooter>
         </form>
