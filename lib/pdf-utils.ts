@@ -1,8 +1,11 @@
 import * as pdfjsLib from 'pdfjs-dist';
 
-// Configure PDF.js worker
+// Configure PDF.js worker - using unpkg as a more reliable CDN
 if (typeof window !== 'undefined') {
-  pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+  // Try multiple CDN sources for better reliability
+  pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.js`;
+
+  console.log('PDF.js worker configured:', pdfjsLib.GlobalWorkerOptions.workerSrc);
 }
 
 /**
@@ -16,12 +19,22 @@ export async function pdfToCanvases(
   onProgress?: (progress: { current: number; total: number }) => void
 ): Promise<HTMLCanvasElement[]> {
   try {
+    console.log('Starting PDF conversion for:', file.name, file.type, file.size, 'bytes');
+
     // Read the file as ArrayBuffer
     const arrayBuffer = await file.arrayBuffer();
+    console.log('PDF file read as ArrayBuffer, size:', arrayBuffer.byteLength);
 
     // Load the PDF document
     const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
+
+    // Add progress tracking for PDF loading
+    loadingTask.onProgress = (progressData: any) => {
+      console.log('PDF loading progress:', progressData);
+    };
+
     const pdf = await loadingTask.promise;
+    console.log('PDF loaded successfully, pages:', pdf.numPages);
 
     const canvases: HTMLCanvasElement[] = [];
     const totalPages = pdf.numPages;
@@ -60,10 +73,15 @@ export async function pdfToCanvases(
       canvases.push(canvas);
     }
 
+    console.log('PDF conversion complete, generated', canvases.length, 'canvas elements');
     return canvases;
   } catch (error) {
     console.error('PDF conversion error:', error);
-    throw new Error('Kunne ikke lese PDF-filen. Kontroller at filen er en gyldig PDF.');
+    if (error instanceof Error) {
+      console.error('Error message:', error.message);
+      console.error('Error stack:', error.stack);
+    }
+    throw new Error(`Kunne ikke lese PDF-filen: ${error instanceof Error ? error.message : 'Ukjent feil'}. Prøv å ta et skjermbilde av PDF-en i stedet.`);
   }
 }
 
